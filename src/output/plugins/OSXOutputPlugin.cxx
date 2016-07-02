@@ -237,6 +237,12 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	}
 	channelmap[0] = oo->output_left;
 	channelmap[1] = oo->output_right;
+
+	for (unsigned int j = 0; j < numchannels; ++j) {
+		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
+	}
+
+
  
 	status = AudioUnitSetProperty(oo->au,
 				      kAudioOutputUnitProperty_ChannelMap,
