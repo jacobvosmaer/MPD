@@ -224,8 +224,8 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 
 	numchannels = desc.mChannelsPerFrame;
 	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
-		error.Format(osx_output_domain, status,
-			     "Invalid OS X audio output channel mapping (%d, %d): only %d channels available",
+		error.Format(osx_output_domain, -1,
+			     "Invalid OS X audio output channel mapping (%u, %u): only %d channels available",
 			     oo->output_left, oo->output_right, numchannels);
 		ret = false;
 		goto done;
@@ -235,15 +235,13 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	for (unsigned int j = 0; j < numchannels; ++j) {
 		channelmap[j] = -1;
 	}
-	channelmap[0] = oo->output_left;
-	channelmap[1] = oo->output_right;
+	channelmap[oo->output_left] = 0;
+	channelmap[oo->output_right] = 1;
 
 	for (unsigned int j = 0; j < numchannels; ++j) {
 		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
 	}
 
-
- 
 	status = AudioUnitSetProperty(oo->au,
 				      kAudioOutputUnitProperty_ChannelMap,
 				      kAudioUnitScope_Output,
