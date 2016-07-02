@@ -236,7 +236,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		channelmap[j] = -1;
 	}
 	channelmap[oo->output_left] = 0;
-	channelmap[oo->output_left] = 1;
+	channelmap[oo->output_right] = 1;
  
 	status = AudioUnitSetProperty(oo->au,
 				      kAudioOutputUnitProperty_ChannelMap,
