@@ -224,7 +224,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 
 	numchannels = desc.mChannelsPerFrame;
 	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
-		error.Format(osx_output_domain, NULL,
+		error.Format(osx_output_domain, status,
 			     "Invalid OS X audio output channel mapping (%d, %d): only %d channels available",
 			     oo->output_left, oo->output_right, numchannels);
 		ret = false;
