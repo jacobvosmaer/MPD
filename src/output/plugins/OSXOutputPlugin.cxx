@@ -40,6 +40,10 @@ struct OSXOutput {
 	/* only applicable with kAudioUnitSubType_HALOutput */
 	const char *device_name;
 
+	uint output_left;
+	uint output_right;
+	bool channel_map;
+
 	AudioUnit au;
 	Mutex mutex;
 	Cond condition;
@@ -77,6 +81,11 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->component_subtype = kAudioUnitSubType_HALOutput;
 		/* XXX am I supposed to strdup() this? */
 		oo->device_name = device;
+	}
+
+	if (oo->channel_map = block.GetBoolValue("channel_map");) {
+		oo->output_left = block.GetUnsignedValue("output_left");
+		oo->output_right = block.GetUnsignedValue("output_right");
 	}
 }
 
