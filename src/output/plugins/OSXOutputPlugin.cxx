@@ -83,9 +83,9 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->device_name = device;
 	}
 
-	if (oo->channel_map = block->GetBoolValue("channel_map");) {
-		oo->output_left = block->GetUnsignedValue("output_left");
-		oo->output_right = block->GetUnsignedValue("output_right");
+	if (oo->channel_map = block.GetBlockParam("channel_map").GetBoolValue;) {
+		oo->output_left = block.GetBlockParam("output_left").GetUnsignedValue();
+		oo->output_right = block.GetBlockParam("output_right").GetUnsignedValue();
 	}
 }
 
