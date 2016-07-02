@@ -227,8 +227,8 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	for (unsigned int j = 0; j < numchannels; ++j) {
 		channelmap[j] = -1;
 	}
-	channelmap[oo->output_left] = 0;
-	channelmap[oo->output_right] = 1;
+	channelmap[0] = oo->output_left;
+	channelmap[1] = oo->output_right;
  
 	status = AudioUnitSetProperty(oo->au,
 				      kAudioOutputUnitProperty_ChannelMap,
