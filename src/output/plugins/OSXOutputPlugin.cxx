@@ -83,12 +83,12 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->device_name = device;
 	}
 
-	const BlockParam *outleft_bp = block.GetBlockParam("output_left");
-	const BlockParam *outright_bp = block.GetBlockParam("output_right");
-	if (outleft_bp && outright_bp) {
+	const BlockParam *output_left_bp = block.GetBlockParam("output_left");
+	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
+	if (output_left_bp && output_right_bp) {
 		oo->set_channel_map = true;
-		oo->output_left = outleft_bp->GetUnsignedValue();
-		oo->output_right = outright_bp->GetUnsignedValue();
+		oo->output_left = output_left_bp->GetUnsignedValue();
+		oo->output_right = output_right_bp->GetUnsignedValue();
 	}
 }
 
@@ -207,8 +207,8 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		goto done;
 	}
 
-    size = sizeof (AudioStreamBasicDescription);
-    status = AudioUnitGetProperty(oo->au,
+	size = sizeof (AudioStreamBasicDescription);
+	status = AudioUnitGetProperty(oo->au,
 				kAudioUnitProperty_StreamFormat,
 				kAudioUnitScope_Output,
 				0, 
