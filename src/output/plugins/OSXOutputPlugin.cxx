@@ -247,7 +247,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 				      kAudioUnitScope_Output,
 				      0,
 				      channelmap,
-				      numchannels * sizeof(SInt32));
+				      (numchannels * sizeof(SInt32)));
 	if (status != noErr) {
 		error.Format(osx_output_domain, status,
 			     "Unable to set OS X audio output channel map: %s",
