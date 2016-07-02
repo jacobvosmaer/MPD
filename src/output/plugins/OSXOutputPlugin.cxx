@@ -42,7 +42,7 @@ struct OSXOutput {
 
 	uint output_left;
 	uint output_right;
-	bool channel_map;
+	bool set_channel_map;
 
 	AudioUnit au;
 	Mutex mutex;
@@ -83,7 +83,7 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->device_name = device;
 	}
 
-	if (oo->channel_map = block.GetBlockParam("channel_map")->GetBoolValue()) {
+	if ((oo->set_channel_map = block.GetBlockParam("set_channel_map")->GetBoolValue())) {
 		oo->output_left = block.GetBlockParam("output_left")->GetUnsignedValue();
 		oo->output_right = block.GetBlockParam("output_right")->GetUnsignedValue();
 	}
@@ -116,8 +116,10 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
 	OSStatus status;
-	UInt32 size, numdevices;
+	UInt32 size, numdevices, numchannels;
+	SInt32 *channelmap = NULL;
 	AudioDeviceID *deviceids = nullptr;
+	AudioStreamBasicDescription desc;
 	char name[256];
 	unsigned int i;
 
@@ -197,6 +199,47 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	FormatDebug(osx_output_domain,
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
+
+	if (!oo->set_channel_map) {
+		goto done;
+	}
+
+    size = sizeof (AudioStreamBasicDescription);
+    status = AudioUnitGetProperty(oo->au,
+				kAudioUnitProperty_StreamFormat,
+				kAudioUnitScope_Output,
+				0, 
+				&desc,
+				&size);
+	if (status != noErr) {
+		error.Format(osx_output_domain, status,
+			     "Unable to get number of  OS X audio output device channels: %s",
+			     GetMacOSStatusCommentString(status));
+		ret = false;
+		goto done;
+	}
+
+	numchannels = desc.mChannelsPerFrame;
+	channelmap = new SInt32[numchannels];
+	for (unsigned int j = 0; j < numchannels; ++j) {
+		channelmap[j] = -1;
+	}
+	channelmap[oo->output_left] = 0;
+	channelmap[oo->output_right] = 1;
+ 
+	status = AudioUnitSetProperty(oo->au,
+				      kAudioOutputUnitProperty_ChannelMap,
+				      kAudioUnitScope_Output,
+				      0,
+				      channelmap,
+				      sizeof(channelmap));
+	if (status != noErr) {
+		error.Format(osx_output_domain, status,
+			     "Unable to set OS X audio output channel map: %s",
+			     GetMacOSStatusCommentString(status));
+		ret = false;
+		goto done;
+	}
 
 done:
 	delete[] deviceids;
