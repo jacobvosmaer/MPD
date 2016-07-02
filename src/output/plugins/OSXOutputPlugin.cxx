@@ -216,13 +216,21 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 				&size);
 	if (status != noErr) {
 		error.Format(osx_output_domain, status,
-			     "Unable to get number of  OS X audio output device channels: %s",
+			     "Unable to get number of OS X audio output device channels: %s",
 			     GetMacOSStatusCommentString(status));
 		ret = false;
 		goto done;
 	}
 
 	numchannels = desc.mChannelsPerFrame;
+	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
+		error.Format(osx_output_domain, NULL,
+			     "Invalid OS X audio output channel mapping (%d, %d): only %d channels available",
+			     oo->output_left, oo->output_right, numchannels);
+		ret = false;
+		goto done;
+	}
+
 	channelmap = new SInt32[numchannels];
 	for (unsigned int j = 0; j < numchannels; ++j) {
 		channelmap[j] = -1;
