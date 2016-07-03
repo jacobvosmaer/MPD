@@ -285,7 +285,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
 	}
 
-	for (unsigned int j = 0 ; j< numelements, ++j) {
+	for (unsigned int j = 0 ; j< numelements; ++j) {
 		status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, j, channelmap, size);
 		if (status != noErr) {
 			osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
