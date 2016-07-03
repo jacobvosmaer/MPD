@@ -133,10 +133,11 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
 	OSStatus status;
-	UInt32 size, numdevices, numchannels;
+	UInt32 size, numdevices, numchannels, numelements;
 	AudioDeviceID *deviceids = nullptr;
 	SInt32 *channelmap = nullptr;
 	AudioObjectPropertyAddress propaddr;
+	AudioStreamBasicDescription desc;
 	CFStringRef cfname = nullptr;
 	char errormsg[1024];
 	char name[256];
@@ -230,7 +231,30 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		goto done;
 	}
 
-	status = AudioUnitGetPropertyInfo(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, &size, nullptr);
+	size = sizeof(numelements);
+	status = AudioUnitGetProperty(oo->au,
+				kAudioUnitProperty_ElementCount,
+				kAudioUnitScope_Output,
+				0, 
+				&numelements,
+				&size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to get number of OS X audio device output element count: %s",
+			     errormsg);
+		ret = false;
+		goto done;
+	}
+	FormatDebug(osx_output_domain, "element count (output scope) for %s is %u", oo->device_name, numelements);
+
+	size = sizeof (AudioStreamBasicDescription);
+	status = AudioUnitGetProperty(oo->au,
+				kAudioUnitProperty_StreamFormat,
+				kAudioUnitScope_Output,
+				0, 
+				&desc,
+				&size);
 	if (status != noErr) {
 		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
 		error.Format(osx_output_domain, status,
@@ -240,7 +264,8 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		goto done;
 	}
 
-	numchannels = size / sizeof(SInt32);
+	numchannels = desc.mChannelsPerFrame;
+
 	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
 		error.Format(osx_output_domain,
 			     "Invalid OS X audio output channel mapping (%u, %u): only %d channels available",
