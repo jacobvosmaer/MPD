@@ -40,6 +40,10 @@ struct OSXOutput {
 	/* only applicable with kAudioUnitSubType_HALOutput */
 	const char *device_name;
 
+	uint output_left;
+	uint output_right;
+	bool set_channel_map;
+
 	AudioComponentInstance au;
 	Mutex mutex;
 	Cond condition;
@@ -92,6 +96,14 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		/* XXX am I supposed to strdup() this? */
 		oo->device_name = device;
 	}
+
+	const BlockParam *output_left_bp = block.GetBlockParam("output_left");
+	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
+	if (output_left_bp && output_right_bp) {
+		oo->set_channel_map = true;
+		oo->output_left = output_left_bp->GetUnsignedValue();
+		oo->output_right = output_right_bp->GetUnsignedValue();
+	}
 }
 
 static AudioOutput *
@@ -121,8 +133,9 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
 	OSStatus status;
-	UInt32 size, numdevices;
+	UInt32 size, numdevices, numchannels;
 	AudioDeviceID *deviceids = nullptr;
+	SInt32 *channelmap = nullptr;
 	AudioObjectPropertyAddress propaddr;
 	CFStringRef cfname = nullptr;
 	char errormsg[1024];
@@ -213,8 +226,53 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
 
+	if (!oo->set_channel_map) {
+		goto done;
+	}
+
+	status = AudioUnitGetPropertyInfo(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, &size, nullptr);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to get number of OS X audio output device channels: %s",
+			     errormsg);
+		ret = false;
+		goto done;
+	}
+
+	numchannels = size / sizeof(SInt32);
+	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
+		error.Format(osx_output_domain,
+			     "Invalid OS X audio output channel mapping (%u, %u): only %d channels available",
+			     oo->output_left, oo->output_right, numchannels);
+		ret = false;
+		goto done;
+	}
+
+	channelmap = new SInt32[numchannels];
+	for (unsigned int j = 0; j < numchannels; ++j) {
+		channelmap[j] = -1;
+	}
+	channelmap[oo->output_left] = 0;
+	channelmap[oo->output_right] = 1;
+
+	for (unsigned int j = 0; j < numchannels; ++j) {
+		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
+	}
+
+	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to set OS X audio output channel map: %s",
+			     errormsg);
+		ret = false;
+		goto done;
+	}
+
 done:
 	delete[] deviceids;
+	delete[] channelmap;
 	if (cfname)
 		CFRelease(cfname);
 	return ret;
