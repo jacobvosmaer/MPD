@@ -285,7 +285,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
 	}
 
-	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, (numchannels * sizeof(SInt32));
+	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, (numchannels * sizeof(SInt32)));
 	if (status != noErr) {
 		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
 		error.Format(osx_output_domain, status,
