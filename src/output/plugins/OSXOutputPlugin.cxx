@@ -285,16 +285,14 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
 	}
 
-	for (unsigned int j = 0 ; j< numelements; ++j) {
-		status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, j, channelmap, size);
-		if (status != noErr) {
-			osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
-			error.Format(osx_output_domain, status,
-				     "Unable to set OS X audio output channel map: %s",
-				     errormsg);
-			ret = false;
-			goto done;
-		}
+	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to set OS X audio output channel map: %s",
+			     errormsg);
+		ret = false;
+		goto done;
 	}
 
 done:
