@@ -100,9 +100,11 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 	const BlockParam *output_left_bp = block.GetBlockParam("output_left");
 	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
 	if (output_left_bp && output_right_bp) {
-		oo->set_channel_map = true;
 		oo->output_left = output_left_bp->GetUnsignedValue();
 		oo->output_right = output_right_bp->GetUnsignedValue();
+	} else {
+		oo->output_left = 0;
+		oo->output_right = 1;
 	}
 }
 
@@ -133,7 +135,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
 	OSStatus status;
-	UInt32 size, numdevices, numchannels, numelements;
+	UInt32 size, numdevices, numchannels;
 	AudioDeviceID *deviceids = nullptr;
 	SInt32 *channelmap = nullptr;
 	AudioObjectPropertyAddress propaddr;
@@ -227,27 +229,6 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
 
-	if (!oo->set_channel_map) {
-		goto done;
-	}
-
-	size = sizeof(numelements);
-	status = AudioUnitGetProperty(oo->au,
-				kAudioUnitProperty_ElementCount,
-				kAudioUnitScope_Output,
-				0, 
-				&numelements,
-				&size);
-	if (status != noErr) {
-		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
-		error.Format(osx_output_domain, status,
-			     "Unable to get number of OS X audio device output element count: %s",
-			     errormsg);
-		ret = false;
-		goto done;
-	}
-	FormatDebug(osx_output_domain, "element count (output scope) for %s is %u", oo->device_name, numelements);
-
 	size = sizeof (AudioStreamBasicDescription);
 	status = AudioUnitGetProperty(oo->au,
 				kAudioUnitProperty_StreamFormat,
@@ -275,6 +256,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	}
 
 	channelmap = new SInt32[numchannels];
+	size = numchannels * sizeof(SInt32);
 	for (unsigned int j = 0; j < numchannels; ++j) {
 		channelmap[j] = -1;
 	}
@@ -285,7 +267,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
 	}
 
-	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, (numchannels * sizeof(SInt32)));
+	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 0, channelmap, size);
 	if (status != noErr) {
 		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
 		error.Format(osx_output_domain, status,
@@ -307,36 +289,57 @@ static OSStatus
 osx_render(void *vdata,
 	   gcc_unused AudioUnitRenderActionFlags *io_action_flags,
 	   gcc_unused const AudioTimeStamp *in_timestamp,
-	   gcc_unused UInt32 in_bus_number,
-	   gcc_unused UInt32 in_number_frames,
+	   UInt32 in_bus_number,
+	   UInt32 in_number_frames,
 	   AudioBufferList *buffer_list)
 {
 	OSXOutput *od = (OSXOutput *) vdata;
-	AudioBuffer *buffer = &buffer_list->mBuffers[0];
-	size_t buffer_size = buffer->mDataByteSize;
+	unsigned int frame_size = od->audio_format.GetFrameSize();
+	unsigned int sample_size = od->audio_format.GetSampleSize();
+	unsigned int i;
 
 	assert(od->buffer != nullptr);
+	assert(in_bus_number == 0);
+	assert(buffer_list->mNumberBuffers == od->audio_format.channels);
+	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+		assert(buffer_list->mBuffers[i].mData != nullptr);
+		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
+	}
 
+	// Acquire mutex when accessing od->buffer (the ring buffer)
 	od->mutex.lock();
 
 	auto src = od->buffer->Read();
-	if (!src.IsEmpty()) {
-		if (src.size > buffer_size)
-			src.size = buffer_size;
 
-		memcpy(buffer->mData, src.data, src.size);
-		od->buffer->Consume(src.size);
+	UInt32 available_frames = src.size / frame_size;
+	if (available_frames > in_number_frames)
+		available_frames = in_number_frames;
+
+	for (UInt32 current_frame = 0; current_frame < available_frames, ++current_frame) {
+		// De-interleave audio
+		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			memcpy(
+				buffer_list->mBuffers[i].mData + current_frame * sample_size,
+				src.data + current_frame * frame_size + i * sample_size,
+				sample_size
+			);
+		}
 	}
+
+	od->buffer->Consume(available_frames * frame_size);
 
 	od->condition.signal();
 	od->mutex.unlock();
 
-	buffer->mDataByteSize = src.size;
-
-	unsigned i;
-	for (i = 1; i < buffer_list->mNumberBuffers; ++i) {
-		buffer = &buffer_list->mBuffers[i];
-		buffer->mDataByteSize = 0;
+	if (available_frames < in_number_frames) {
+		// Play silence during a buffer underrun
+		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			memset(
+				buffer_list->mBuffers[i].mData + availabe_frames * sample_size,
+				0,
+				(in_number_frames - available_frames) * sample_size
+			);
+		}
 	}
 
 	return 0;
