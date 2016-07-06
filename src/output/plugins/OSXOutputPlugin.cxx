@@ -45,9 +45,10 @@ struct OSXOutput {
 	bool set_channel_map;
 
 	AudioComponentInstance au;
+	AudioStreamBasicDescription *asbd;
+
 	Mutex mutex;
 	Cond condition;
-
 	DynamicFifoBuffer<uint8_t> *buffer;
 
 	OSXOutput()
@@ -289,18 +290,19 @@ static OSStatus
 osx_render(void *vdata,
 	   gcc_unused AudioUnitRenderActionFlags *io_action_flags,
 	   gcc_unused const AudioTimeStamp *in_timestamp,
-	   UInt32 in_bus_number,
+	   gcc_unused UInt32 in_bus_number,
 	   UInt32 in_number_frames,
 	   AudioBufferList *buffer_list)
 {
 	OSXOutput *od = (OSXOutput *) vdata;
-	unsigned int frame_size = od->audio_format.GetFrameSize();
-	unsigned int sample_size = od->audio_format.GetSampleSize();
+	AudioStreamBasicDescription *asbd = od->asbd;
+	size_t sample_size = asbd->mBytesPerFrame / asbd->mChannelsPerFrame;
 	unsigned int i;
+	uint8_t dest;
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
-	assert(buffer_list->mNumberBuffers == od->audio_format.channels);
+	assert(buffer_list->mNumberBuffers == asbd->mChannelsPerFrame);
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 		assert(buffer_list->mBuffers[i].mData != nullptr);
 		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
@@ -311,22 +313,23 @@ osx_render(void *vdata,
 
 	auto src = od->buffer->Read();
 
-	UInt32 available_frames = src.size / frame_size;
+	UInt32 available_frames = src.size / asbd->mBytesPerFrame;
 	if (available_frames > in_number_frames)
 		available_frames = in_number_frames;
 
-	for (UInt32 current_frame = 0; current_frame < available_frames, ++current_frame) {
+	for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
 		// De-interleave audio
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			dest = (size_t) buffer_list->mBuffers[i].mData;
 			memcpy(
-				buffer_list->mBuffers[i].mData + current_frame * sample_size,
-				src.data + current_frame * frame_size + i * sample_size,
+				(void *) (dest + current_frame * sample_size),
+				src.data + current_frame * asbd->mBytesPerFrame + i * sample_size,
 				sample_size
 			);
 		}
 	}
 
-	od->buffer->Consume(available_frames * frame_size);
+	od->buffer->Consume(available_frames * asbd->mBytesPerFrame);
 
 	od->condition.signal();
 	od->mutex.unlock();
@@ -334,8 +337,9 @@ osx_render(void *vdata,
 	if (available_frames < in_number_frames) {
 		// Play silence during a buffer underrun
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			dest = (size_t) buffer_list->mBuffers[i].mData;
 			memset(
-				buffer_list->mBuffers[i].mData + availabe_frames * sample_size,
+				(void *) (dest + available_frames * sample_size),
 				0,
 				(in_number_frames - available_frames) * sample_size
 			);
@@ -484,6 +488,22 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 			     errormsg);
 		return false;
 	}
+
+	UInt32 size = sizeof(od->asbd);
+	status = AudioUnitGetProperty(od->au,
+				kAudioUnitProperty_StreamFormat,
+				kAudioUnitScope_Input,
+				0, 
+				od->asbd,
+				&size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to get AudioStreamDescription of output HAL device: %s",
+			     errormsg);
+		return false;
+	}
+
 
 	/* create a buffer of 1s */
 	od->buffer = new DynamicFifoBuffer<uint8_t>(audio_format.sample_rate *
