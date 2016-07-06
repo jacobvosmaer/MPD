@@ -300,7 +300,7 @@ osx_render(void *vdata,
 	unsigned int i;
 	uint8_t dest;
 
-	FormatDebug(osx_output_domain, "osx_render %s", od->device_name);
+	FormatDebug(osx_output_domain, "osx_render %s %u frames", od->device_name, in_number_frames);
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
@@ -309,6 +309,8 @@ osx_render(void *vdata,
 		assert(buffer_list->mBuffers[i].mData != nullptr);
 		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
 	}
+
+	FormatDebug(osx_output_domain, "osx_render %s critical section", od->device_name);
 
 	// Acquire mutex when accessing od->buffer (the ring buffer)
 	od->mutex.lock();
@@ -335,6 +337,8 @@ osx_render(void *vdata,
 
 	od->condition.signal();
 	od->mutex.unlock();
+
+	FormatDebug(osx_output_domain, "osx_render %s critical section done; start zeroing underrun area", od->device_name);
 
 	if (available_frames < in_number_frames) {
 		// Play silence during a buffer underrun
