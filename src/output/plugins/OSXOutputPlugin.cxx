@@ -489,7 +489,9 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 		return false;
 	}
 
+	FormatDebug(osx_output_domain, "%s: getting asbd of audio unit", od->device_name);
 	UInt32 size = sizeof(od->asbd);
+	memset(od->asbd, 0, size);
 	status = AudioUnitGetProperty(od->au,
 				kAudioUnitProperty_StreamFormat,
 				kAudioUnitScope_Input,
@@ -504,6 +506,7 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 		return false;
 	}
 
+	FormatDebug(osx_output_domain, "%s: creating ring buffer", od->device_name);
 
 	/* create a buffer of 1s */
 	od->buffer = new DynamicFifoBuffer<uint8_t>(audio_format.sample_rate *
