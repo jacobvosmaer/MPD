@@ -296,19 +296,18 @@ osx_render(void *vdata,
 {
 	OSXOutput *od = (OSXOutput *) vdata;
 	AudioStreamBasicDescription asbd = od->asbd;
+	AudioBuffer *buffer = nullptr;
 	size_t sample_size = asbd.mBytesPerFrame / asbd.mChannelsPerFrame;
-	unsigned int i;
+	size_t buffer_frame_size, sample_bytes_consumed;
+	unsigned int i, j;
 	uint8_t dest;
 
 	FormatDebug(osx_output_domain, "osx_render %s, %u frames, %u buffers", od->device_name, in_number_frames, buffer_list->mNumberBuffers);
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
-	assert(buffer_list->mNumberBuffers == asbd.mChannelsPerFrame);
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 		assert(buffer_list->mBuffers[i].mData != nullptr);
-		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
-		assert(buffer_list->mBuffers[i].mNumberChannels == 1);
 	}
 
 	FormatDebug(osx_output_domain, "osx_render %s critical section", od->device_name);
@@ -318,7 +317,7 @@ osx_render(void *vdata,
 
 	auto src = od->buffer->Read();
 
-	FormatDebug(osx_output_domain, "osx_render %s ring buffer size %u", od->device_name, src.size);
+	FormatDebug(osx_output_domain, "osx_render %s ring buffer size %zu", od->device_name, src.size);
 
 	UInt32 available_frames = src.size / asbd.mBytesPerFrame;
 	if (available_frames > in_number_frames)
@@ -326,15 +325,20 @@ osx_render(void *vdata,
 
 	for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
 		// De-interleave audio
+		sample_bytes_consumed = 0;
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-			dest = (size_t) buffer_list->mBuffers[i].mData;
+			buffer = &buffer_list->mBuffers[i];
+			buffer_frame_size = buffer->mNumberChannels * sample_size;
+			dest = (size_t) buffer->mData + current_frame * buffer_frame_size;
 
-			FormatDebug(osx_output_domain, "osx_render %s memcpy", od->device_name);
+			FormatDebug(osx_output_domain, "osx_render %s memcpy buffer %u", od->device_name, i);
 			memcpy(
-				(void *) (dest + current_frame * sample_size),
-				src.data + current_frame * asbd.mBytesPerFrame + i * sample_size,
-				sample_size
+				(void *) dest,
+				src.data + current_frame * asbd.mBytesPerFrame + sample_bytes_consumed,
+				buffer_frame_size
 			);
+
+			sample_bytes_consumed += buffer_frame_size;
 		}
 	}
 
@@ -348,12 +352,14 @@ osx_render(void *vdata,
 	if (available_frames < in_number_frames) {
 		// Play silence during a buffer underrun
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-			dest = (size_t) buffer_list->mBuffers[i].mData;
+			buffer = &buffer_list->mBuffers[i];
+			buffer_frame_size = buffer->mNumberChannels * sample_size;
+			dest = (size_t) buffer->mData + available_frames * buffer_frame_size;
 			FormatDebug(osx_output_domain, "osx_render %s memset", od->device_name);
 			memset(
-				(void *) (dest + available_frames * sample_size),
+				(void *) dest,
 				0,
-				(in_number_frames - available_frames) * sample_size
+				(in_number_frames - available_frames) * buffer_frame_size
 			);
 		}
 	}
