@@ -298,9 +298,8 @@ osx_render(void *vdata,
 	AudioStreamBasicDescription asbd = od->asbd;
 	AudioBuffer *buffer = nullptr;
 	size_t sample_size = asbd.mBytesPerFrame / asbd.mChannelsPerFrame;
-	size_t buffer_frame_size, sample_bytes_consumed;
-	unsigned int i, j;
-	uint8_t dest;
+	size_t buffer_frame_size, sample_bytes_consumed, dest;
+	unsigned int i;
 
 	FormatDebug(osx_output_domain, "osx_render %s, %u frames, %u buffers", od->device_name, in_number_frames, buffer_list->mNumberBuffers);
 
