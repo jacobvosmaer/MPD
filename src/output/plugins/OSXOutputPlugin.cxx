@@ -300,7 +300,7 @@ osx_render(void *vdata,
 	unsigned int i;
 	uint8_t dest;
 
-	FormatDebug(osx_output_domain, "osx_render %s %u frames", od->device_name, in_number_frames);
+	FormatDebug(osx_output_domain, "osx_render %s, %u frames, %u buffers", od->device_name, in_number_frames, buffer_list->mNumberBuffers);
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
@@ -308,6 +308,7 @@ osx_render(void *vdata,
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 		assert(buffer_list->mBuffers[i].mData != nullptr);
 		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
+		assert(buffer_list->mBuffers[i].mNumberChannels == 1);
 	}
 
 	FormatDebug(osx_output_domain, "osx_render %s critical section", od->device_name);
