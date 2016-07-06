@@ -299,24 +299,28 @@ osx_render(void *vdata,
 	AudioBuffer *buffer = nullptr;
 	size_t sample_size = asbd.mBytesPerFrame / asbd.mChannelsPerFrame;
 	size_t buffer_frame_size, sample_bytes_consumed, dest;
-	unsigned int i;
+	unsigned int i, channel_count;
 
-	FormatDebug(osx_output_domain, "osx_render %s, %u frames, %u buffers", od->device_name, in_number_frames, buffer_list->mNumberBuffers);
+//	FormatDebug(osx_output_domain, "osx_render %s, %u frames, %u buffers", od->device_name, in_number_frames, buffer_list->mNumberBuffers);
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
+	channel_count = 0;
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-		assert(buffer_list->mBuffers[i].mData != nullptr);
+		buffer = &buffer_list->mBuffers[i];
+		assert(buffer->mData != nullptr);
+		channel_count += buffer->mNumberChannels;
 	}
+	assert(channel_count == asbd.mChannelsPerFrame);
 
-	FormatDebug(osx_output_domain, "osx_render %s critical section", od->device_name);
+//	FormatDebug(osx_output_domain, "osx_render %s critical section", od->device_name);
 
 	// Acquire mutex when accessing od->buffer (the ring buffer)
 	od->mutex.lock();
 
 	auto src = od->buffer->Read();
 
-	FormatDebug(osx_output_domain, "osx_render %s ring buffer size %zu", od->device_name, src.size);
+//	FormatDebug(osx_output_domain, "osx_render %s ring buffer size %zu", od->device_name, src.size);
 
 	UInt32 available_frames = src.size / asbd.mBytesPerFrame;
 	if (available_frames > in_number_frames)
@@ -330,7 +334,7 @@ osx_render(void *vdata,
 			buffer_frame_size = buffer->mNumberChannels * sample_size;
 			dest = (size_t) buffer->mData + current_frame * buffer_frame_size;
 
-			FormatDebug(osx_output_domain, "osx_render %s memcpy buffer %u", od->device_name, i);
+//			FormatDebug(osx_output_domain, "osx_render %s memcpy buffer %u", od->device_name, i);
 			memcpy(
 				(void *) dest,
 				src.data + current_frame * asbd.mBytesPerFrame + sample_bytes_consumed,
@@ -346,7 +350,7 @@ osx_render(void *vdata,
 	od->condition.signal();
 	od->mutex.unlock();
 
-	FormatDebug(osx_output_domain, "osx_render %s critical section done; start zeroing underrun area", od->device_name);
+//	FormatDebug(osx_output_domain, "osx_render %s critical section done; start zeroing underrun area", od->device_name);
 
 	if (available_frames < in_number_frames) {
 		// Play silence during a buffer underrun
