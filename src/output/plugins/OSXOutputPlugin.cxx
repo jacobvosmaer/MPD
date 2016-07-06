@@ -317,6 +317,8 @@ osx_render(void *vdata,
 
 	auto src = od->buffer->Read();
 
+	FormatDebug(osx_output_domain, "osx_render %s ring buffer size %u", od->device_name, src.size);
+
 	UInt32 available_frames = src.size / asbd.mBytesPerFrame;
 	if (available_frames > in_number_frames)
 		available_frames = in_number_frames;
@@ -325,6 +327,8 @@ osx_render(void *vdata,
 		// De-interleave audio
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			dest = (size_t) buffer_list->mBuffers[i].mData;
+
+			FormatDebug(osx_output_domain, "osx_render %s memcpy", od->device_name);
 			memcpy(
 				(void *) (dest + current_frame * sample_size),
 				src.data + current_frame * asbd.mBytesPerFrame + i * sample_size,
@@ -344,6 +348,7 @@ osx_render(void *vdata,
 		// Play silence during a buffer underrun
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			dest = (size_t) buffer_list->mBuffers[i].mData;
+			FormatDebug(osx_output_domain, "osx_render %s memset", od->device_name);
 			memset(
 				(void *) (dest + available_frames * sample_size),
 				0,
