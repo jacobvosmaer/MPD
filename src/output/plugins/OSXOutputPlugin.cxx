@@ -300,6 +300,8 @@ osx_render(void *vdata,
 	unsigned int i;
 	uint8_t dest;
 
+	FormatDebug(osx_output_domain, "osx_render %s", od->device_name);
+
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
 	assert(buffer_list->mNumberBuffers == asbd.mChannelsPerFrame);
@@ -437,8 +439,6 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	char errormsg[1024];
 	OSXOutput *od = (OSXOutput *)ao;
 
-	FormatDebug(osx_output_domain, "enter osx_output_open for audio device %s", od->device_name);
-
 	od->asbd.mSampleRate = audio_format.sample_rate;
 	od->asbd.mFormatID = kAudioFormatLinearPCM;
 	od->asbd.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
@@ -495,7 +495,7 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 						    audio_format.GetFrameSize());
 
 	status = AudioOutputUnitStart(od->au);
-	if (status != 0) {
+	if (status != noErr) {
 		AudioUnitUninitialize(od->au);
 		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
 		error.Format(osx_output_domain, status,
@@ -503,8 +503,6 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 			     errormsg);
 		return false;
 	}
-
-	FormatDebug(osx_output_domain, "opened audio device %s", od->device_name);
 
 	return true;
 }
