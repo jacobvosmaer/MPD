@@ -45,7 +45,7 @@ struct OSXOutput {
 	bool set_channel_map;
 
 	AudioComponentInstance au;
-	AudioStreamBasicDescription *asbd;
+	AudioStreamBasicDescription asbd;
 
 	Mutex mutex;
 	Cond condition;
@@ -295,14 +295,14 @@ osx_render(void *vdata,
 	   AudioBufferList *buffer_list)
 {
 	OSXOutput *od = (OSXOutput *) vdata;
-	AudioStreamBasicDescription *asbd = od->asbd;
-	size_t sample_size = asbd->mBytesPerFrame / asbd->mChannelsPerFrame;
+	AudioStreamBasicDescription asbd = od->asbd;
+	size_t sample_size = asbd.mBytesPerFrame / asbd.mChannelsPerFrame;
 	unsigned int i;
 	uint8_t dest;
 
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
-	assert(buffer_list->mNumberBuffers == asbd->mChannelsPerFrame);
+	assert(buffer_list->mNumberBuffers == asbd.mChannelsPerFrame);
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 		assert(buffer_list->mBuffers[i].mData != nullptr);
 		assert(buffer_list->mBuffers[i].mDataByteSize == in_number_frames * sample_size);
@@ -313,7 +313,7 @@ osx_render(void *vdata,
 
 	auto src = od->buffer->Read();
 
-	UInt32 available_frames = src.size / asbd->mBytesPerFrame;
+	UInt32 available_frames = src.size / asbd.mBytesPerFrame;
 	if (available_frames > in_number_frames)
 		available_frames = in_number_frames;
 
@@ -323,13 +323,13 @@ osx_render(void *vdata,
 			dest = (size_t) buffer_list->mBuffers[i].mData;
 			memcpy(
 				(void *) (dest + current_frame * sample_size),
-				src.data + current_frame * asbd->mBytesPerFrame + i * sample_size,
+				src.data + current_frame * asbd.mBytesPerFrame + i * sample_size,
 				sample_size
 			);
 		}
 	}
 
-	od->buffer->Consume(available_frames * asbd->mBytesPerFrame);
+	od->buffer->Consume(available_frames * asbd.mBytesPerFrame);
 
 	od->condition.signal();
 	od->mutex.unlock();
@@ -437,43 +437,43 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	char errormsg[1024];
 	OSXOutput *od = (OSXOutput *)ao;
 
-	AudioStreamBasicDescription stream_description;
-	stream_description.mSampleRate = audio_format.sample_rate;
-	stream_description.mFormatID = kAudioFormatLinearPCM;
-	stream_description.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
+	memset(&od->asbd, 0, sizeof(od->asbd));
+	od->asbd.mSampleRate = audio_format.sample_rate;
+	od->asbd.mFormatID = kAudioFormatLinearPCM;
+	od->asbd.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
 
 	switch (audio_format.format) {
 	case SampleFormat::S8:
-		stream_description.mBitsPerChannel = 8;
+		od->asbd.mBitsPerChannel = 8;
 		break;
 
 	case SampleFormat::S16:
-		stream_description.mBitsPerChannel = 16;
+		od->asbd.mBitsPerChannel = 16;
 		break;
 
 	case SampleFormat::S32:
-		stream_description.mBitsPerChannel = 32;
+		od->asbd.mBitsPerChannel = 32;
 		break;
 
 	default:
 		audio_format.format = SampleFormat::S32;
-		stream_description.mBitsPerChannel = 32;
+		od->asbd.mBitsPerChannel = 32;
 		break;
 	}
 
 	if (IsBigEndian())
-		stream_description.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
+		od->asbd.mFormatFlags |= kLinearPCMFormatFlagIsBigEndian;
 
-	stream_description.mBytesPerPacket = audio_format.GetFrameSize();
-	stream_description.mFramesPerPacket = 1;
-	stream_description.mBytesPerFrame = stream_description.mBytesPerPacket;
-	stream_description.mChannelsPerFrame = audio_format.channels;
+	od->asbd.mBytesPerPacket = audio_format.GetFrameSize();
+	od->asbd.mFramesPerPacket = 1;
+	od->asbd.mBytesPerFrame = od->asbd.mBytesPerPacket;
+	od->asbd.mChannelsPerFrame = audio_format.channels;
 
 	OSStatus status =
 		AudioUnitSetProperty(od->au, kAudioUnitProperty_StreamFormat,
 				     kAudioUnitScope_Input, 0,
-				     &stream_description,
-				     sizeof(stream_description));
+				     &od->asbd,
+				     sizeof(od->asbd));
 	if (status != noErr) {
 		error.Set(osx_output_domain, status,
 			  "Unable to set format on OS X device");
@@ -488,26 +488,6 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 			     errormsg);
 		return false;
 	}
-
-	FormatDebug(osx_output_domain, "%s: zero od->asbd of audio unit", od->device_name);
-	UInt32 size = sizeof(AudioStreamBasicDescription);
-	memset(od->asbd, 0, size);
-	FormatDebug(osx_output_domain, "%s: getting asbd of audio unit", od->device_name);
-	status = AudioUnitGetProperty(od->au,
-				kAudioUnitProperty_StreamFormat,
-				kAudioUnitScope_Input,
-				0, 
-				od->asbd,
-				&size);
-	if (status != noErr) {
-		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
-		error.Format(osx_output_domain, status,
-			     "Unable to get AudioStreamDescription of output HAL device: %s",
-			     errormsg);
-		return false;
-	}
-
-	FormatDebug(osx_output_domain, "%s: creating ring buffer", od->device_name);
 
 	/* create a buffer of 1s */
 	od->buffer = new DynamicFifoBuffer<uint8_t>(audio_format.sample_rate *
