@@ -489,9 +489,10 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 		return false;
 	}
 
-	FormatDebug(osx_output_domain, "%s: getting asbd of audio unit", od->device_name);
+	FormatDebug(osx_output_domain, "%s: zero od->asbd of audio unit", od->device_name);
 	UInt32 size = sizeof(AudioStreamBasicDescription);
 	memset(od->asbd, 0, size);
+	FormatDebug(osx_output_domain, "%s: getting asbd of audio unit", od->device_name);
 	status = AudioUnitGetProperty(od->au,
 				kAudioUnitProperty_StreamFormat,
 				kAudioUnitScope_Input,
