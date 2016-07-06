@@ -437,6 +437,8 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	char errormsg[1024];
 	OSXOutput *od = (OSXOutput *)ao;
 
+	FormatDebug(osx_output_domain, "enter osx_output_open for audio device %s", od->device_name);
+
 	od->asbd.mSampleRate = audio_format.sample_rate;
 	od->asbd.mFormatID = kAudioFormatLinearPCM;
 	od->asbd.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger;
@@ -501,6 +503,8 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 			     errormsg);
 		return false;
 	}
+
+	FormatDebug(osx_output_domain, "opened audio device %s", od->device_name);
 
 	return true;
 }
