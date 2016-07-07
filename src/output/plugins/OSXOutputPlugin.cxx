@@ -301,6 +301,8 @@ osx_render(void *vdata,
 	size_t buffer_frame_size, sample_bytes_consumed, dest;
 	unsigned int i, channel_count;
 
+	FormatDebug(osx_output_domain, "osx_render %s: %u buffers", od->device_name, buffer_list->mNumberBuffers);
+
 	assert(od->buffer != nullptr);
 	assert(in_bus_number == 0);
 	channel_count = 0;
