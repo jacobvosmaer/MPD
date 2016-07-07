@@ -302,7 +302,7 @@ osx_render(void *vdata,
 	unsigned int i, channel_count;
 
 	assert(ring_buffer != nullptr);
-	assert(in_bus_number == 0);
+	assert(in_bus_number == 0);	// '0' means we use the audio hardware to _output_ sound (instead of input)
 	channel_count = 0;
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 		audio_buffer = &buffer_list->mBuffers[i];
@@ -321,14 +321,15 @@ osx_render(void *vdata,
 	if (available_frames > in_number_frames)
 		available_frames = in_number_frames;
 
+	// Loop over ring buffer frames
 	for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
-		// De-interleave ring buffer data if necessary
+		// De-interleave the current ring buffer frame onto available audio buffers
 		sample_bytes_consumed = 0;
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			// Copy sub-frame of the current ring buffer frame into its respective audio buffer
 			audio_buffer = &buffer_list->mBuffers[i];
 			audio_buffer_frame_size = audio_buffer->mNumberChannels * sample_size;
 			dest = (size_t) audio_buffer->mData + current_frame * audio_buffer_frame_size;
-
 			memcpy(
 				(void *) dest,
 				src.data + current_frame * asbd.mBytesPerFrame + sample_bytes_consumed,
@@ -344,8 +345,9 @@ osx_render(void *vdata,
 	od->condition.signal();
 	od->mutex.unlock();
 
+	// Play silence during a buffer underrun
 	if (available_frames < in_number_frames) {
-		// Play silence ('0' samples) during a buffer underrun
+		// Fill the remaining space in each audio buffer with '0'
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			audio_buffer = &buffer_list->mBuffers[i];
 			audio_buffer_frame_size = audio_buffer->mNumberChannels * sample_size;
