@@ -42,7 +42,6 @@ struct OSXOutput {
 
 	uint output_left;
 	uint output_right;
-	bool set_channel_map;
 
 	AudioComponentInstance au;
 	AudioStreamBasicDescription asbd;
@@ -295,67 +294,66 @@ osx_render(void *vdata,
 	   AudioBufferList *buffer_list)
 {
 	OSXOutput *od = (OSXOutput *) vdata;
+	DynamicFifoBuffer<uint8_t> *ring_buffer = od->buffer;
 	AudioStreamBasicDescription asbd = od->asbd;
-	AudioBuffer *buffer = nullptr;
+	AudioBuffer *audio_buffer = nullptr;
 	size_t sample_size = asbd.mBytesPerFrame / asbd.mChannelsPerFrame;
-	size_t buffer_frame_size, sample_bytes_consumed, dest;
+	size_t audio_buffer_frame_size, sample_bytes_consumed, dest;
 	unsigned int i, channel_count;
 
-	FormatDebug(osx_output_domain, "osx_render %s: %u buffers", od->device_name, buffer_list->mNumberBuffers);
-
-	assert(od->buffer != nullptr);
+	assert(ring_buffer != nullptr);
 	assert(in_bus_number == 0);
 	channel_count = 0;
 	for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-		buffer = &buffer_list->mBuffers[i];
-		assert(buffer->mData != nullptr);
-		channel_count += buffer->mNumberChannels;
+		audio_buffer = &buffer_list->mBuffers[i];
+		assert(audio_buffer->mData != nullptr);
+		channel_count += audio_buffer->mNumberChannels;
 	}
 	assert(channel_count == asbd.mChannelsPerFrame);
 
-	// Acquire mutex when accessing od->buffer (the ring buffer)
+	// Acquire mutex when accessing ring_buffer
 	od->mutex.lock();
 
-	auto src = od->buffer->Read();
+	auto src = ring_buffer->Read();
 
 	UInt32 available_frames = src.size / asbd.mBytesPerFrame;
+	// Never write more frames than we were asked
 	if (available_frames > in_number_frames)
-		// Never 
 		available_frames = in_number_frames;
 
 	for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
-		// De-interleave audio
+		// De-interleave ring buffer data if necessary
 		sample_bytes_consumed = 0;
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-			buffer = &buffer_list->mBuffers[i];
-			buffer_frame_size = buffer->mNumberChannels * sample_size;
-			dest = (size_t) buffer->mData + current_frame * buffer_frame_size;
+			audio_buffer = &buffer_list->mBuffers[i];
+			audio_buffer_frame_size = audio_buffer->mNumberChannels * sample_size;
+			dest = (size_t) audio_buffer->mData + current_frame * audio_buffer_frame_size;
 
 			memcpy(
 				(void *) dest,
 				src.data + current_frame * asbd.mBytesPerFrame + sample_bytes_consumed,
-				buffer_frame_size
+				audio_buffer_frame_size
 			);
 
-			sample_bytes_consumed += buffer_frame_size;
+			sample_bytes_consumed += audio_buffer_frame_size;
 		}
 	}
 
-	od->buffer->Consume(available_frames * asbd.mBytesPerFrame);
+	ring_buffer->Consume(available_frames * asbd.mBytesPerFrame);
 
 	od->condition.signal();
 	od->mutex.unlock();
 
 	if (available_frames < in_number_frames) {
-		// Play silence during a buffer underrun
+		// Play silence ('0' samples) during a buffer underrun
 		for (i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-			buffer = &buffer_list->mBuffers[i];
-			buffer_frame_size = buffer->mNumberChannels * sample_size;
-			dest = (size_t) buffer->mData + available_frames * buffer_frame_size;
+			audio_buffer = &buffer_list->mBuffers[i];
+			audio_buffer_frame_size = audio_buffer->mNumberChannels * sample_size;
+			dest = (size_t) audio_buffer->mData + available_frames * audio_buffer_frame_size;
 			memset(
 				(void *) dest,
 				0,
-				(in_number_frames - available_frames) * buffer_frame_size
+				(in_number_frames - available_frames) * audio_buffer_frame_size
 			);
 		}
 	}
