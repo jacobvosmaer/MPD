@@ -127,13 +127,12 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 {
 	AudioStreamBasicDescription desc;
 	SInt32 *channelmap = nullptr;
-	UInt32 numchannels;
+	UInt32 size, numchannels;
 	char errormsg[1024];
 	const char *remaining;
 	bool ret = true;
 	bool wantnumber;
 	unsigned int j;
-	size_t size;
 	OSStatus status;
 
 	size = sizeof(desc);
