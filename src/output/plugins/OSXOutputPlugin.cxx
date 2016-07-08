@@ -127,8 +127,12 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 {
 	AudioStreamBasicDescription desc;
 	SInt32 *channelmap = nullptr;
+	UInt32 numchannels;
 	char errormsg[1024];
+	const char *remaining;
 	bool ret = true;
+	bool wantnumber;
+	unsigned int j;
 	size_t size;
 	OSError status;
 
@@ -149,13 +153,13 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 		goto done;
 	}
 
-	UInt32 numchannels = desc.mChannelsPerFrame;
+	numchannels = desc.mChannelsPerFrame;
 	channelmap = new SInt32[numchannels];
 
-	const char *remaining = oo->channel_map;
+	remaining = oo->channel_map;
 	char **endptr;
-	unsigned int j = 0;
-	bool wantnumber = true;
+	j = 0;
+	wantnumber = true;
 
 	while (*remaining) {
 		if (j >= numchannels) {
