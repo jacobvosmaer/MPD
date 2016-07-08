@@ -32,6 +32,8 @@
 #include <AudioUnit/AudioUnit.h>
 #include <CoreServices/CoreServices.h>
 
+#define CHANNEL_MAP "channel_map"
+
 struct OSXOutput {
 	AudioOutput base;
 
@@ -39,9 +41,7 @@ struct OSXOutput {
 	OSType component_subtype;
 	/* only applicable with kAudioUnitSubType_HALOutput */
 	const char *device_name;
-
-	uint output_left;
-	uint output_right;
+	const char *channel_map;
 
 	AudioComponentInstance au;
 	AudioStreamBasicDescription asbd;
@@ -97,16 +97,7 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->device_name = device;
 	}
 
-	oo->output_left = 0;
-	oo->output_right = 1;
-
-	const BlockParam *output_left_bp = block.GetBlockParam("output_left");
-	if (output_left_bp)
-		oo->output_left = output_left_bp->GetUnsignedValue();
-
-	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
-	if (output_right_bp)
-		oo->output_right = output_right_bp->GetUnsignedValue();
+	oo->channel_map = block.GetBlockValue(CHANNEL_MAP);
 }
 
 static AudioOutput *
@@ -230,6 +221,9 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
 
+	if (oo->channel_map == nullptr)
+		goto done;
+
 	size = sizeof (AudioStreamBasicDescription);
 	status = AudioUnitGetProperty(oo->au,
 				kAudioUnitProperty_StreamFormat,
@@ -247,27 +241,14 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 	}
 
 	numchannels = desc.mChannelsPerFrame;
-
-	if (oo->output_left >= numchannels || oo->output_right >= numchannels) {
-		error.Format(osx_output_domain,
-			     "Invalid OS X audio output channel mapping (%u, %u): only %d channels available",
-			     oo->output_left, oo->output_right, numchannels);
+	channelmap = new SInt32[numchannels];
+	if (!osx_parse_channel_map(oo, channelmap, numchannels, error) {
+		// Error message is printed by osx_parse_channel_map
 		ret = false;
 		goto done;
 	}
 
-	channelmap = new SInt32[numchannels];
 	size = numchannels * sizeof(SInt32);
-	for (unsigned int j = 0; j < numchannels; ++j) {
-		channelmap[j] = -1;
-	}
-	channelmap[oo->output_left] = 0;
-	channelmap[oo->output_right] = 1;
-
-	for (unsigned int j = 0; j < numchannels; ++j) {
-		FormatDebug(osx_output_domain, "channelmap[%u] = %d", j, channelmap[j]);
-	}
-
 	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0, channelmap, size);
 	if (status != noErr) {
 		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
@@ -285,6 +266,50 @@ done:
 		CFRelease(cfname);
 	return ret;
 }
+
+static bool
+osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Error &error)
+{
+	char *remaining = oo->channel_map;
+	char **endptr;
+	unsigned_int j = 0;
+
+	while (*remaining) {
+		if (j >= numchannels) {
+			error.Format(osx_output_domain,
+			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
+			return false
+		}
+
+		if (*remaining == ':') {
+			++remaining;
+		} else if isdigit(*remaining) {
+			channelmap[j] = strtol(remaining, endptr, 10);
+			if (channelmap[j] < -1) {
+				error.Format(osx_output_domain,
+				     "%s: %s value %d not allowed (must be -1 or greater)", oo->device_name, CHANNEL_MAP, channelmap[j]);
+				return false;
+			}
+			remaining = *endptr;
+			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
+		} else {
+			error.Format(osx_output_domain,
+			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
+			return false;
+		}
+
+		++j;
+	}
+
+	if (j + 1 < numchannels) {
+		error.Format(osx_output_domain,
+		     "%s: %s contains less than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
+		return false;
+	}
+
+	return true;
+}
+
 
 static OSStatus
 osx_render(void *vdata,
