@@ -98,7 +98,6 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 	}
 
 	oo->channel_map = block.GetBlockValue(CHANNEL_MAP);
-	FormatDebug(osx_output_domain, "%s %s in config: %s", oo->device_name, CHANNEL_MAP, oo->channel_map);
 }
 
 static AudioOutput *
@@ -136,8 +135,6 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	unsigned int j;
 	OSStatus status;
 
-	FormatDebug(osx_output_domain, "%s entering osx_output_set_channel_map; %s in config: %s", oo->device_name, CHANNEL_MAP, oo->channel_map);
-
 	size = sizeof(desc);
 	memset(&desc, 0, size);
 	status = AudioUnitGetProperty(oo->au,
@@ -164,6 +161,8 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	wantnumber = true;
 
 	while (*remaining) {
+		FormatDebug(osx_output_domain, "%s %s remaining: %s j: %u wantnumber: %u", oo->device_name, CHANNEL_MAP, remaining, j, wantnumber);
+
 		if (j >= numchannels) {
 			error.Format(osx_output_domain,
 			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
