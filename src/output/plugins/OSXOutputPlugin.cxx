@@ -270,7 +270,7 @@ done:
 static bool
 osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Error &error)
 {
-	char *remaining = oo->channel_map;
+	const char *remaining = oo->channel_map;
 	char **endptr;
 	unsigned int j = 0;
 	bool wantnumber = true;
