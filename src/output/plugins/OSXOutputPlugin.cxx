@@ -123,6 +123,52 @@ osx_output_finish(AudioOutput *ao)
 }
 
 static bool
+osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Error &error)
+{
+	const char *remaining = oo->channel_map;
+	char **endptr;
+	unsigned int j = 0;
+	bool wantnumber = true;
+
+	while (*remaining) {
+		if (j >= numchannels) {
+			error.Format(osx_output_domain,
+			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
+			return false;
+		}
+
+		if (*remaining == ':' && !wantnumber) {
+			++remaining;
+			wantnumber = true;
+		} else if (isdigit(*remaining) && wantnumber) {
+			channelmap[j] = strtol(remaining, endptr, 10);
+			if (channelmap[j] < -1) {
+				error.Format(osx_output_domain,
+				     "%s: %s value %d not allowed (must be -1 or greater)", oo->device_name, CHANNEL_MAP, channelmap[j]);
+				return false;
+			}
+			remaining = *endptr;
+			wantnumber = false;
+			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
+		} else {
+			error.Format(osx_output_domain,
+			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
+			return false;
+		}
+
+		++j;
+	}
+
+	if (j + 1 < numchannels) {
+		error.Format(osx_output_domain,
+		     "%s: %s contains less than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
+		return false;
+	}
+
+	return true;
+}
+
+static bool
 osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
@@ -266,53 +312,6 @@ done:
 		CFRelease(cfname);
 	return ret;
 }
-
-static bool
-osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Error &error)
-{
-	const char *remaining = oo->channel_map;
-	char **endptr;
-	unsigned int j = 0;
-	bool wantnumber = true;
-
-	while (*remaining) {
-		if (j >= numchannels) {
-			error.Format(osx_output_domain,
-			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
-			return false;
-		}
-
-		if (*remaining == ':' && !wantnumber) {
-			++remaining;
-			wantnumber = true;
-		} else if (isdigit(*remaining) && wantnumber) {
-			channelmap[j] = strtol(remaining, endptr, 10);
-			if (channelmap[j] < -1) {
-				error.Format(osx_output_domain,
-				     "%s: %s value %d not allowed (must be -1 or greater)", oo->device_name, CHANNEL_MAP, channelmap[j]);
-				return false;
-			}
-			remaining = *endptr;
-			wantnumber = false;
-			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
-		} else {
-			error.Format(osx_output_domain,
-			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
-			return false;
-		}
-
-		++j;
-	}
-
-	if (j + 1 < numchannels) {
-		error.Format(osx_output_domain,
-		     "%s: %s contains less than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
-		return false;
-	}
-
-	return true;
-}
-
 
 static OSStatus
 osx_render(void *vdata,
