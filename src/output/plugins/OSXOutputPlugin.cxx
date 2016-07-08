@@ -123,8 +123,35 @@ osx_output_finish(AudioOutput *ao)
 }
 
 static bool
-osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Error &error)
+osx_output_set_channel_map(OSXOutput *oo, Error &error)
 {
+	AudioStreamBasicDescription desc;
+	SInt32 *channelmap = nullptr;
+	char errormsg[1024];
+	bool ret = true;
+	size_t size;
+	OSError status;
+
+	size = sizeof(desc);
+	memset(&desc, 0, size);
+	status = AudioUnitGetProperty(oo->au,
+				kAudioUnitProperty_StreamFormat,
+				kAudioUnitScope_Output,
+				0, 
+				&desc,
+				&size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to get number of OS X audio output device channels: %s",
+			     errormsg);
+		ret = false;
+		goto done;
+	}
+
+	UInt32 numchannels = desc.mChannelsPerFrame;
+	channelmap = new SInt32[numchannels];
+
 	const char *remaining = oo->channel_map;
 	char **endptr;
 	unsigned int j = 0;
@@ -134,7 +161,8 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 		if (j >= numchannels) {
 			error.Format(osx_output_domain,
 			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
-			return false;
+			ret = false;
+			goto done;
 		}
 
 		if (*remaining == ':' && !wantnumber) {
@@ -145,7 +173,8 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 			if (channelmap[j] < -1) {
 				error.Format(osx_output_domain,
 				     "%s: %s value %d not allowed (must be -1 or greater)", oo->device_name, CHANNEL_MAP, channelmap[j]);
-				return false;
+				ret = false;
+				goto done;
 			}
 			remaining = *endptr;
 			wantnumber = false;
@@ -153,7 +182,8 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 		} else {
 			error.Format(osx_output_domain,
 			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
-			return false;
+			ret = false;
+			goto done;
 		}
 
 		++j;
@@ -162,10 +192,24 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 	if (j + 1 < numchannels) {
 		error.Format(osx_output_domain,
 		     "%s: %s contains less than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
-		return false;
+		ret = false;
+		goto done;
 	}
 
-	return true;
+	size = numchannels * sizeof(SInt32);
+	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0, channelmap, size);
+	if (status != noErr) {
+		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
+		error.Format(osx_output_domain, status,
+			     "Unable to set OS X audio output channel map: %s",
+			     errormsg);
+		ret = false;
+		goto done;
+	}
+
+done:
+	delete[] channelmap;
+	return ret;
 }
 
 static bool
@@ -173,11 +217,9 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 {
 	bool ret = true;
 	OSStatus status;
-	UInt32 size, numdevices, numchannels;
+	UInt32 size, numdevices;
 	AudioDeviceID *deviceids = nullptr;
-	SInt32 *channelmap = nullptr;
 	AudioObjectPropertyAddress propaddr;
-	AudioStreamBasicDescription desc;
 	CFStringRef cfname = nullptr;
 	char errormsg[1024];
 	char name[256];
@@ -267,47 +309,12 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
 
-	if (oo->channel_map == nullptr)
-		goto done;
-
-	size = sizeof (AudioStreamBasicDescription);
-	status = AudioUnitGetProperty(oo->au,
-				kAudioUnitProperty_StreamFormat,
-				kAudioUnitScope_Output,
-				0, 
-				&desc,
-				&size);
-	if (status != noErr) {
-		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
-		error.Format(osx_output_domain, status,
-			     "Unable to get number of OS X audio output device channels: %s",
-			     errormsg);
+	if (oo->channel_map != nullptr && !osx_output_set_channel_map(oo, error))
 		ret = false;
 		goto done;
-	}
-
-	numchannels = desc.mChannelsPerFrame;
-	channelmap = new SInt32[numchannels];
-	if (!osx_parse_channel_map(oo, channelmap, numchannels, error) {
-		// Error message is printed by osx_parse_channel_map
-		ret = false;
-		goto done;
-	}
-
-	size = numchannels * sizeof(SInt32);
-	status = AudioUnitSetProperty(oo->au, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0, channelmap, size);
-	if (status != noErr) {
-		osx_os_status_to_cstring(status, errormsg, sizeof(errormsg));
-		error.Format(osx_output_domain, status,
-			     "Unable to set OS X audio output channel map: %s",
-			     errormsg);
-		ret = false;
-		goto done;
-	}
 
 done:
 	delete[] deviceids;
-	delete[] channelmap;
 	if (cfname)
 		CFRelease(cfname);
 	return ret;
