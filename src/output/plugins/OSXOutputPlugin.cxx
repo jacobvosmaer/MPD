@@ -134,7 +134,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	bool wantnumber;
 	unsigned int j;
 	size_t size;
-	OSError status;
+	OSStatus status;
 
 	size = sizeof(desc);
 	memset(&desc, 0, size);
