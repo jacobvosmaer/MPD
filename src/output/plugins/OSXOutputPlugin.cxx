@@ -272,18 +272,20 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 {
 	char *remaining = oo->channel_map;
 	char **endptr;
-	unsigned_int j = 0;
+	unsigned int j = 0;
+	bool wantnumber = true;
 
 	while (*remaining) {
 		if (j >= numchannels) {
 			error.Format(osx_output_domain,
 			     "%s: %s contains more than %u entries", oo->device_name, CHANNEL_MAP, numchannels);
-			return false
+			return false;
 		}
 
-		if (*remaining == ':') {
+		if (*remaining == ':' && !wantnumber) {
 			++remaining;
-		} else if isdigit(*remaining) {
+			wantnumber = true;
+		} else if (isdigit(*remaining) && wantnumber) {
 			channelmap[j] = strtol(remaining, endptr, 10);
 			if (channelmap[j] < -1) {
 				error.Format(osx_output_domain,
@@ -291,6 +293,7 @@ osx_parse_channel_map(OSXOutput *oo, SInt32 channelmap[], UInt32 numchannels, Er
 				return false;
 			}
 			remaining = *endptr;
+			wantnumber = false;
 			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
 		} else {
 			error.Format(osx_output_domain,
