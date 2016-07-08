@@ -97,15 +97,16 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 		oo->device_name = device;
 	}
 
+	oo->output_left = 0;
+	oo->output_right = 1;
+
 	const BlockParam *output_left_bp = block.GetBlockParam("output_left");
-	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
-	if (output_left_bp && output_right_bp) {
+	if (output_left_bp)
 		oo->output_left = output_left_bp->GetUnsignedValue();
+
+	const BlockParam *output_right_bp = block.GetBlockParam("output_right");
+	if (output_right_bp)
 		oo->output_right = output_right_bp->GetUnsignedValue();
-	} else {
-		oo->output_left = 0;
-		oo->output_right = 1;
-	}
 }
 
 static AudioOutput *
