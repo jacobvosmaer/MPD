@@ -98,6 +98,7 @@ osx_output_configure(OSXOutput *oo, const ConfigBlock &block)
 	}
 
 	oo->channel_map = block.GetBlockValue(CHANNEL_MAP);
+	FormatDebug(osx_output_domain, "%s %s in config: %s", oo->device_name, CHANNEL_MAP, oo->channel_map);
 }
 
 static AudioOutput *
@@ -135,6 +136,8 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	unsigned int j;
 	OSStatus status;
 
+	FormatDebug(osx_output_domain, "%s entering osx_output_set_channel_map; %s in config: %s", oo->device_name, CHANNEL_MAP, oo->channel_map);
+
 	size = sizeof(desc);
 	memset(&desc, 0, size);
 	status = AudioUnitGetProperty(oo->au,
@@ -171,7 +174,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 		if (*remaining == ':' && !wantnumber) {
 			++remaining;
 			wantnumber = true;
-		} else if (isdigit(*remaining) && wantnumber) {
+		} else if ((isdigit(*remaining) || *remaining == '-') && wantnumber) {
 			channelmap[j] = strtol(remaining, endptr, 10);
 			if (channelmap[j] < -1) {
 				error.Format(osx_output_domain,
@@ -312,7 +315,7 @@ osx_output_set_device(OSXOutput *oo, Error &error)
 		    "set OS X audio output device ID=%u, name=%s",
 		    (unsigned)deviceids[i], name);
 
-	if (oo->channel_map != nullptr && !osx_output_set_channel_map(oo, error))
+	if (oo->channel_map && !osx_output_set_channel_map(oo, error))
 		ret = false;
 		goto done;
 
