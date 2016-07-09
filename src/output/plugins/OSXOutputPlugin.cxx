@@ -184,6 +184,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 			remaining = *endptr;
 			wantnumber = false;
 			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
+			FormatDebug(osx_output_domain, "%s", remaining);
 		} else {
 			error.Format(osx_output_domain,
 			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
