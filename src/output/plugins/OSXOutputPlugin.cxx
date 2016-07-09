@@ -161,7 +161,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	wantnumber = true;
 
 	while (*remaining) {
-		FormatDebug(osx_output_domain, "%s %s remaining: %s j: %u wantnumber: %u", oo->device_name, CHANNEL_MAP, remaining, j, wantnumber);
+		// FormatDebug(osx_output_domain, "%s %s remaining: %s j: %u wantnumber: %u", oo->device_name, CHANNEL_MAP, remaining, j, wantnumber);
 
 		if (j >= numchannels) {
 			error.Format(osx_output_domain,
