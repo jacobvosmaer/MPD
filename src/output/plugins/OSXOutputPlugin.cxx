@@ -340,7 +340,7 @@ osx_render(void *vdata,
 	size_t audio_buffer_frame_size, sample_bytes_consumed, dest;
 	unsigned int i, channel_count;
 
-printf("%u\n"; buffer_list->mNumberBuffers);
+printf("%u\n", buffer_list->mNumberBuffers);
 
 	assert(ring_buffer != nullptr);
 	assert(in_bus_number == 0);	// '0' means we use the audio hardware to _output_ sound (instead of input)
