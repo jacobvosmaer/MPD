@@ -156,7 +156,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	channelmap = new SInt32[numchannels];
 
 	remaining = oo->channel_map;
-	char **endptr;
+	char *endptr;
 	j = 0;
 	wantnumber = true;
 
@@ -174,14 +174,14 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 			++remaining;
 			wantnumber = true;
 		} else if ((isdigit(*remaining) || *remaining == '-') && wantnumber) {
-			channelmap[j] = strtol(remaining, endptr, 10);
+			channelmap[j] = strtol(remaining, &endptr, 10);
 			if (channelmap[j] < -1) {
 				error.Format(osx_output_domain,
 				     "%s: %s value %d not allowed (must be -1 or greater)", oo->device_name, CHANNEL_MAP, channelmap[j]);
 				ret = false;
 				goto done;
 			}
-			remaining = *endptr;
+			remaining = endptr;
 			wantnumber = false;
 			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
 			FormatDebug(osx_output_domain, "%s", remaining);
