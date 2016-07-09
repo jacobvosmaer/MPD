@@ -161,7 +161,7 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 	wantnumber = true;
 
 	while (*remaining) {
-		// FormatDebug(osx_output_domain, "%s %s remaining: %s j: %u wantnumber: %u", oo->device_name, CHANNEL_MAP, remaining, j, wantnumber);
+		FormatDebug(osx_output_domain, "%s %s remaining: %s j: %u wantnumber: %u", oo->device_name, CHANNEL_MAP, remaining, j, wantnumber);
 
 		if (j >= numchannels) {
 			error.Format(osx_output_domain,
@@ -184,15 +184,13 @@ osx_output_set_channel_map(OSXOutput *oo, Error &error)
 			remaining = endptr;
 			wantnumber = false;
 			FormatDebug(osx_output_domain, "%s channelmap[%u] = %d", oo->device_name, j, channelmap[j]);
-			FormatDebug(osx_output_domain, "%s", remaining);
+			++j;
 		} else {
 			error.Format(osx_output_domain,
 			     "%s: invalid character %c in %s", oo->device_name, *remaining, CHANNEL_MAP);
 			ret = false;
 			goto done;
 		}
-
-		++j;
 	}
 
 	if (j + 1 < numchannels) {
