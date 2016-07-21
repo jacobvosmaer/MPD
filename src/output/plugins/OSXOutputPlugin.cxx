@@ -20,11 +20,10 @@
 #include "config.h"
 #include "OSXOutputPlugin.hxx"
 #include "../OutputAPI.hxx"
-#include "util/DynamicFifoBuffer.hxx"
+#include "util/CircularBuffer.hxx"
+#include "util/HugeAllocator.hxx"
 #include "util/Error.hxx"
 #include "util/Domain.hxx"
-#include "thread/Mutex.hxx"
-#include "thread/Cond.hxx"
 #include "system/ByteOrder.hxx"
 #include "Log.hxx"
 
@@ -43,10 +42,9 @@ struct OSXOutput {
 
 	AudioComponentInstance au;
 	AudioStreamBasicDescription asbd;
-	Mutex mutex;
-	Cond condition;
 
-	DynamicFifoBuffer<uint8_t> *buffer;
+	CircularBuffer<uint8_t> *buffer;
+	size_t buffer_size;
 
 	OSXOutput()
 		:base(osx_output_plugin) {}
@@ -388,7 +386,7 @@ osx_render(void *vdata,
 	size_t output_buffer_frame_size, dest;
 
 	OSXOutput *od = (OSXOutput *) vdata;
-	DynamicFifoBuffer<uint8_t> *input_buffer = od->buffer;
+	CircularBuffer<uint8_t> *input_buffer = od->buffer;
 	assert(input_buffer != nullptr);
 
 	/*
@@ -410,50 +408,53 @@ osx_render(void *vdata,
 	size_t input_buffer_frame_size = od->asbd.mBytesPerFrame;
 	size_t sample_size = input_buffer_frame_size / input_channel_count;
 
-	// Acquire mutex when accessing input_buffer
-	od->mutex.lock();
+	UInt32 frames_left = in_number_frames;
+	// Try memcpy twice in case of ring buffer wraparound
+	for (unsigned j = 0 ; j < 1 ; ++j) {
+		if (frames_left == 0)
+			break;
 
-	auto src = input_buffer->Read();
-
-	UInt32 available_frames = src.size / input_buffer_frame_size;
-	// Never write more frames than we were asked
-	if (available_frames > in_number_frames)
-		available_frames = in_number_frames;
-
-	/*
-		To de-interleave the data in the input buffer so that it fits in
-		the output buffers we divide the input buffer frames into 'sub frames'
-		that fit into the output buffers.
-	*/
-	size_t sub_frame_offset = 0;
-	for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-		output_buffer = &buffer_list->mBuffers[i];
-		output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
-		for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
-				dest = (size_t) output_buffer->mData + current_frame * output_buffer_frame_size;
-				memcpy(
-					(void *) dest,
-					src.data + current_frame * input_buffer_frame_size + sub_frame_offset,
-					output_buffer_frame_size
-				);
-		}
-		sub_frame_offset += output_buffer_frame_size;
-	}
-
-	input_buffer->Consume(available_frames * input_buffer_frame_size);
-
-	od->condition.signal();
-	od->mutex.unlock();
-
-	if (available_frames < in_number_frames) {
+		CircularBuffer<uint8_t>::Range src = input_buffer->Read();
+	
+		UInt32 available_frames = src.size / input_buffer_frame_size;
+		// Never write more frames than we were asked
+		if (available_frames > frames_left)
+			available_frames = frames_left;
+	
+		/*
+			To de-interleave the data in the input buffer so that it fits in
+			the output buffers we divide the input buffer frames into 'sub frames'
+			that fit into the output buffers.
+		*/
+		size_t sub_frame_offset = 0;
 		for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			output_buffer = &buffer_list->mBuffers[i];
 			output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
-			dest = (size_t) output_buffer->mData + available_frames * output_buffer_frame_size;
+			for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
+					dest = (size_t) output_buffer->mData + current_frame * output_buffer_frame_size;
+					memcpy(
+						(void *) dest,
+						src.data + current_frame * input_buffer_frame_size + sub_frame_offset,
+						output_buffer_frame_size
+					);
+			}
+			sub_frame_offset += output_buffer_frame_size;
+		}
+	
+		input_buffer->Consume(available_frames * input_buffer_frame_size);
+		frames_left -= available_frames;
+	}
+
+	if (frames_left > 0) {
+		assert(in_number_frames > frames_left);
+		for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
+			output_buffer = &buffer_list->mBuffers[i];
+			output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
+			dest = (size_t) output_buffer->mData + (in_number_frames - frames_left) * output_buffer_frame_size;
 			memset(
 				(void *) dest,
 				0,
-				(in_number_frames - available_frames) * output_buffer_frame_size
+				frames_left * output_buffer_frame_size
 			);
 		}
 	}
@@ -523,15 +524,6 @@ osx_output_disable(AudioOutput *ao)
 }
 
 static void
-osx_output_cancel(AudioOutput *ao)
-{
-	OSXOutput *od = (OSXOutput *)ao;
-
-	const ScopeLock protect(od->mutex);
-	od->buffer->Clear();
-}
-
-static void
 osx_output_close(AudioOutput *ao)
 {
 	OSXOutput *od = (OSXOutput *)ao;
@@ -539,7 +531,11 @@ osx_output_close(AudioOutput *ao)
 	AudioOutputUnitStop(od->au);
 	AudioUnitUninitialize(od->au);
 
-	delete od->buffer;
+	if (od->buffer != nullptr) {
+		od->buffer->Clear();
+		HugeFree(od->buffer->Write().data, od->buffer_size);
+		delete od->buffer;
+	}
 }
 
 static bool
@@ -602,8 +598,10 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	}
 
 	/* create a buffer of 1s */
-	od->buffer = new DynamicFifoBuffer<uint8_t>(audio_format.sample_rate *
-						    audio_format.GetFrameSize());
+	od->buffer_size = audio_format.sample_rate * audio_format.GetFrameSize();
+	void *p = HugeAllocate(od->buffer_size);
+	assert(p != nullptr);
+	od->buffer = new CircularBuffer<uint8_t>((uint8_t *)p, od->buffer_size);
 
 	status = AudioOutputUnitStart(od->au);
 	if (status != 0) {
@@ -624,17 +622,7 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 {
 	OSXOutput *od = (OSXOutput *)ao;
 
-	const ScopeLock protect(od->mutex);
-
-	DynamicFifoBuffer<uint8_t>::Range dest;
-	while (true) {
-		dest = od->buffer->Write();
-		if (!dest.IsEmpty())
-			break;
-
-		/* wait for some free space in the buffer */
-		od->condition.wait(od->mutex);
-	}
+	CircularBuffer<uint8_t>::Range dest = od->buffer->Write();
 
 	if (size > dest.size)
 		size = dest.size;
@@ -658,7 +646,7 @@ const struct AudioOutputPlugin osx_output_plugin = {
 	nullptr,
 	osx_output_play,
 	nullptr,
-	osx_output_cancel,
+	nullptr,
 	nullptr,
 	nullptr,
 };
