@@ -532,8 +532,11 @@ osx_output_delay(AudioOutput *ao)
 	OSXOutput *od = (OSXOutput *)ao;
 
 	if ((od->buffer != nullptr) && od->buffer->IsFull()) {
-		return 100;
+		FormatDebug(osx_output_domain, "delay: buffer full");
+		return 10;
 	}
+
+	FormatDebug(osx_output_domain, "delay: buffer not full");
 
 	return 0;
 }
@@ -630,6 +633,8 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 
 	memcpy(dest.data, chunk, size);
 	od->buffer->Append(size);
+
+	FormatDebug(osx_output_domain, "play: wrote %zu bytes", size);
 
 	return size;
 }
