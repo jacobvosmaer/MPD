@@ -604,7 +604,7 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	/* create a buffer of 1s */
 	FormatDebug(osx_output_domain, "allocate ringbuffer");
 	// Add 1 because the last ring buffer cell is not used
-	od->buffer_size = 1 + audio_format.sample_rate * audio_format.GetFrameSize();
+	od->buffer_size = (1 + audio_format.sample_rate) * audio_format.GetFrameSize();
 	void *p = HugeAllocate(od->buffer_size);
 	assert(p != nullptr);
 	od->buffer = new CircularBuffer<uint8_t>((uint8_t *)p, od->buffer_size);
