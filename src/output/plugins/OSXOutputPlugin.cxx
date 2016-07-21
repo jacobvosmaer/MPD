@@ -429,6 +429,7 @@ osx_render(void *vdata,
 		size_t sub_frame_offset = 0;
 		for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			output_buffer = &buffer_list->mBuffers[i];
+			output_buffer->mDataByteSize = 0;
 			output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
 			for (UInt32 current_frame = 0; current_frame < available_frames; ++current_frame) {
 					dest = (size_t) output_buffer->mData + current_frame * output_buffer_frame_size;
@@ -437,28 +438,13 @@ osx_render(void *vdata,
 						src.data + current_frame * input_buffer_frame_size + sub_frame_offset,
 						output_buffer_frame_size
 					);
+					++output_buffer->mDataByteSize;
 			}
 			sub_frame_offset += output_buffer_frame_size;
 		}
 	
 		input_buffer->Consume(available_frames * input_buffer_frame_size);
 		frames_left -= available_frames;
-	}
-
-	if (frames_left > 0) {
-		size_t rendered_frames = in_number_frames - frames_left;
-		assert(rendered_frames >= 0);
-
-		for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
-			output_buffer = &buffer_list->mBuffers[i];
-			output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
-			dest = (size_t) output_buffer->mData + rendered_frames * output_buffer_frame_size;
-			memset(
-				(void *) dest,
-				0,
-				frames_left * output_buffer_frame_size
-			);
-		}
 	}
 
 	return noErr;
