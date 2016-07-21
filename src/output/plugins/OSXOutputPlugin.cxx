@@ -634,6 +634,9 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 	if (size > dest.size)
 		size = dest.size;
 
+	if (size == 0)
+		return 0;
+
 	FormatDebug(osx_output_domain, "write %d bytes to ringbuffer (%d bytes free space)", size, dest.size);
 
 	memcpy(dest.data, chunk, size);
