@@ -438,7 +438,7 @@ osx_render(void *vdata,
 						src.data + current_frame * input_buffer_frame_size + sub_frame_offset,
 						output_buffer_frame_size
 					);
-					++output_buffer->mDataByteSize;
+					output_buffer->mDataByteSize += output_buffer_frame_size;
 			}
 			sub_frame_offset += output_buffer_frame_size;
 		}
