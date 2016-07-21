@@ -627,12 +627,13 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 		gcc_unused Error &error)
 {
 	OSXOutput *od = (OSXOutput *)ao;
-	FormatDebug(osx_output_domain, "write to ringbuffer");
 
 	CircularBuffer<uint8_t>::Range dest = od->buffer->Write();
 
 	if (size > dest.size)
 		size = dest.size;
+
+	FormatDebug(osx_output_domain, "write %d bytes to ringbuffer (%d bytes free space)", size, dest.size);
 
 	memcpy(dest.data, chunk, size);
 	od->buffer->Append(size);
