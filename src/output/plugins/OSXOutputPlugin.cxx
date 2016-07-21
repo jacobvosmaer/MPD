@@ -382,6 +382,8 @@ osx_render(void *vdata,
 	   UInt32 in_number_frames,
 	   AudioBufferList *buffer_list)
 {
+	FormatDebug(osx_output_domain, "render callback");
+
 	AudioBuffer *output_buffer = nullptr;
 	size_t output_buffer_frame_size, dest;
 
@@ -410,7 +412,7 @@ osx_render(void *vdata,
 
 	UInt32 frames_left = in_number_frames;
 	// Try memcpy twice in case of ring buffer wraparound
-	for (unsigned j = 0 ; j < 1 ; ++j) {
+	for (unsigned j = 0 ; j < 2 ; ++j) {
 		if (frames_left == 0)
 			break;
 
@@ -446,11 +448,13 @@ osx_render(void *vdata,
 	}
 
 	if (frames_left > 0) {
-		assert(in_number_frames > frames_left);
+		size_t rendered_frames = in_number_frames - frames_left;
+		assert(rendered_frames >= 0);
+
 		for (unsigned int i = 0 ; i < buffer_list->mNumberBuffers; ++i) {
 			output_buffer = &buffer_list->mBuffers[i];
 			output_buffer_frame_size = output_buffer->mNumberChannels * sample_size;
-			dest = (size_t) output_buffer->mData + (in_number_frames - frames_left) * output_buffer_frame_size;
+			dest = (size_t) output_buffer->mData + rendered_frames * output_buffer_frame_size;
 			memset(
 				(void *) dest,
 				0,
@@ -598,10 +602,12 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	}
 
 	/* create a buffer of 1s */
+	FormatDebug(osx_output_domain, "allocate ringbuffer");
 	od->buffer_size = audio_format.sample_rate * audio_format.GetFrameSize();
 	void *p = HugeAllocate(od->buffer_size);
 	assert(p != nullptr);
 	od->buffer = new CircularBuffer<uint8_t>((uint8_t *)p, od->buffer_size);
+	FormatDebug(osx_output_domain, "start audio unit");
 
 	status = AudioOutputUnitStart(od->au);
 	if (status != 0) {
@@ -621,6 +627,7 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 		gcc_unused Error &error)
 {
 	OSXOutput *od = (OSXOutput *)ao;
+	FormatDebug(osx_output_domain, "write to ringbuffer");
 
 	CircularBuffer<uint8_t>::Range dest = od->buffer->Write();
 
