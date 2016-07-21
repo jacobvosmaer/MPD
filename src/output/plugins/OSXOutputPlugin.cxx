@@ -382,8 +382,6 @@ osx_render(void *vdata,
 	   UInt32 in_number_frames,
 	   AudioBufferList *buffer_list)
 {
-	FormatDebug(osx_output_domain, "render callback");
-
 	AudioBuffer *output_buffer = nullptr;
 	size_t output_buffer_frame_size, dest;
 
@@ -614,13 +612,11 @@ osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 	}
 
 	/* create a buffer of 1s */
-	FormatDebug(osx_output_domain, "allocate ringbuffer");
 	// Add 1 because the last ring buffer cell is not used
 	od->buffer_size = 1 + audio_format.sample_rate * audio_format.GetFrameSize();
 	void *p = HugeAllocate(od->buffer_size);
 	assert(p != nullptr);
 	od->buffer = new CircularBuffer<uint8_t>((uint8_t *)p, od->buffer_size);
-	FormatDebug(osx_output_domain, "start audio unit");
 
 	status = AudioOutputUnitStart(od->au);
 	if (status != 0) {
@@ -646,12 +642,8 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 	if (size > dest.size)
 		size = dest.size;
 
-	FormatDebug(osx_output_domain, "write %zu bytes to ringbuffer (%zu bytes free space)", size, dest.size);
-
 	memcpy(dest.data, chunk, size);
 	od->buffer->Append(size);
-
-	FormatDebug(osx_output_domain, "finish write");
 
 	return size;
 }
