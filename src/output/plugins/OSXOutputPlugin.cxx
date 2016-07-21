@@ -542,6 +542,18 @@ osx_output_close(AudioOutput *ao)
 	}
 }
 
+unsigned
+osx_output_delay(AudioOutput *ao)
+{
+	OSXOutput *od = (OSXOutput *)ao;
+
+	if ((od->buffer != nullptr) && od->buffer->IsFull()) {
+		return 500;
+	}
+
+	return 0;
+}
+
 static bool
 osx_output_open(AudioOutput *ao, AudioFormat &audio_format,
 		Error &error)
@@ -634,12 +646,12 @@ osx_output_play(AudioOutput *ao, const void *chunk, size_t size,
 	if (size > dest.size)
 		size = dest.size;
 
-	FormatDebug(osx_output_domain, "write %d bytes to ringbuffer (%d bytes free space)", size, dest.size);
+	FormatDebug(osx_output_domain, "write %zu bytes to ringbuffer (%zu bytes free space)", size, dest.size);
 
 	memcpy(dest.data, chunk, size);
 	od->buffer->Append(size);
 
-	FormatDebug(osx_output_domain, "finish write", size, dest.size);
+	FormatDebug(osx_output_domain, "finish write");
 
 	return size;
 }
@@ -653,7 +665,7 @@ const struct AudioOutputPlugin osx_output_plugin = {
 	osx_output_disable,
 	osx_output_open,
 	osx_output_close,
-	nullptr,
+	osx_output_delay,
 	nullptr,
 	osx_output_play,
 	nullptr,
