@@ -532,7 +532,7 @@ osx_output_delay(AudioOutput *ao)
 	OSXOutput *od = (OSXOutput *)ao;
 
 	if ((od->buffer != nullptr) && od->buffer->IsFull()) {
-		return 500;
+		return 100;
 	}
 
 	return 0;
